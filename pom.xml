@@ -27,7 +27,7 @@
     <exec.addResourcesToClasspath>true</exec.addResourcesToClasspath>
     <exec.cleanupDaemonThreads>false</exec.cleanupDaemonThreads>
     <!-- project settings -->
-    <exec.mainClass>kim.charlesb.projects.crou/kim.charlesb.crou.AppDriver</exec.mainClass>
+    <exec.mainClass>kim.charlesb.rcouModule/kim.charlesb.rcou.AppDriver</exec.mainClass>
   </properties>
 
   <developers>

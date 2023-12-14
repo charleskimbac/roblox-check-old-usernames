@@ -2,4 +2,4 @@
 
 mvn -q clean
 mvn -q compile
-mvn -q exec:exec -Dexec.mainClass=kim.charlesb.projects.crou/kim.charlesb.crou.AppDriver
+mvn -q exec:exec -Dexec.mainClass=kim.charlesb.rcouModule/kim.charlesb.rcou.AppDriver
