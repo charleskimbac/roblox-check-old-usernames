@@ -25,8 +25,6 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextField;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -46,7 +44,7 @@ public class App extends Application {
     Scene scene;
     VBox root;
     HBox interactLayer;
-    TextField usernameField;
+    TextField textField;
     Button submitButton;
     Button helpButton;
     Label prevNameResults;
@@ -58,13 +56,13 @@ public class App extends Application {
     VBox resultLayer;
     ProgressBar pb; //pb for aesthetics :)
     Runnable runnable;
-    ImageView imageView;
     Alert helpAlert;
     String username;
     long usernameID;
     String displayName;
     CheckBox checkBox;
     StackPane stackPane;
+    String prevNames;
 
     /**
      * Constructs an {@code ApiApp} object. This default (i.e., no argument)
@@ -78,20 +76,17 @@ public class App extends Application {
         interactLayer = new HBox(4);
         interactLayer.setAlignment(Pos.CENTER);
 
-        usernameField = new TextField("username");
-        usernameField.setMinWidth(150);
+        textField = new TextField("username");
+        textField.setMinWidth(150);
+        textField.setMaxWidth(Double.MAX_VALUE); // maxwidth is small by default
 
-        HBox.setHgrow(usernameField, Priority.ALWAYS);
+        HBox.setHgrow(textField, Priority.ALWAYS);
 
         submitButton = new Button("Submit");
         submitButton.setMinHeight(12);
         submitButton.setMinWidth(54);
         submitButton.setMaxWidth(54);
         submitButton.setPadding(new Insets(4));
-
-        imageView = new ImageView(new Image("file:resources/help.png"));
-        imageView.setPreserveRatio(true);
-        imageView.setFitHeight(14);
 
         helpButton = new Button("?"); // 
         helpButton.setFont(Font.font(Font.getDefault().getName(), FontWeight.EXTRA_BOLD, 16));
@@ -106,8 +101,8 @@ public class App extends Application {
 
         prevNameResults = new Label();
         prevNameResults.setStyle("-fx-text-alignment: center;");
-        // so initial app launch text is centered since this is empty
-        prevNameResults.setManaged(false);
+        
+        prevNameResults.setManaged(false); // so initial app launch text is centered since this is empty
 
         directionsTextFlow = new TextFlow();
         directionsTextFlow.setStyle("-fx-text-alignment: center;");
@@ -145,22 +140,23 @@ public class App extends Application {
         runnable = doAPIcallsRunnable();
 
         checkBox = new CheckBox("OCR");
-        checkBox.setPadding(new Insets(0, 7, 0 , 0));
+        checkBox.setPadding(new Insets(0, 7, 0, 0));
 
         stackPane = new StackPane();
         StackPane.setAlignment(checkBox, Pos.CENTER_RIGHT);
+        HBox.setHgrow(stackPane, Priority.ALWAYS);
     } // ApiApp
 
     /** {@inheritDoc} */
     @Override
     public void init() {
-        stackPane.getChildren().addAll(usernameField, checkBox);
+        stackPane.getChildren().addAll(textField, checkBox);
         interactLayer.getChildren().addAll(stackPane, helpButton, submitButton);
         resultLayer.getChildren().addAll(directionsTextFlow, prevNameResults);
         directionsTextFlow.getChildren().addAll(boldText, regularText);
         root.getChildren().addAll(interactLayer, resultLayer, pb);
 
-        usernameField.setOnKeyPressed(event -> {
+        textField.setOnKeyPressed(event -> {
             if (event.getCode().getName().equals("Enter")) {
                 Thread thread = new Thread(runnable);
                 thread.setDaemon(true);
@@ -190,7 +186,7 @@ public class App extends Application {
     public void start(Stage stage) {
         this.stage = stage;
         scene = new Scene(root);
-        stage.setTitle("Check Previous Roblox Usernames");
+        stage.setTitle("Roblox: Check Old Usernames");
         stage.setScene(scene);
         stage.sizeToScene();
         stage.show();
@@ -209,9 +205,11 @@ public class App extends Application {
                 regularText.setManaged(true); // so everything is centered when regularText is empty
             });
             try {
+                /*
                 //if user typed a space, change it to an underscore
-                String temp = usernameField.getText();
-                separateNames(usernameField.getText());
+                String temp = textField.getText();
+                separateNames(textField.getText());
+
                 username = "";
                 for (int i = 0; i < temp.length(); i++) {
                     if (temp.charAt(i) == ' ') {
@@ -220,15 +218,16 @@ public class App extends Application {
                         username += temp.charAt(i);
                     }
                 }
-                String requestBody = "{\"usernames\": [\"" + username + "\"], \"excludeBannedUsers\": true}";
-                HttpRequest requestUsernameToID = HttpRequest.newBuilder()
+                */
+                String input = separateNames(textField.getText());
+                String requestBody = "{\"usernames\": [" + input + "], \"excludeBannedUsers\": true}";
+                HttpRequest usernameToIDRequest = HttpRequest.newBuilder()
                     .uri(URI.create("https://users.roblox.com/v1/usernames/users"))
                     .header("Content-Type", "application/json")
                     .header("accept", "application/json")
                     .POST(BodyPublishers.ofString(requestBody))
                     .build();
-                HttpResponse<String> response1 =
-                    httpClient.send(requestUsernameToID, BodyHandlers.ofString());
+                HttpResponse<String> response1 = httpClient.send(usernameToIDRequest, BodyHandlers.ofString());
                 if (response1.statusCode() != 200) {
                     Platform.runLater(() -> {
                         boldText.setText("");
@@ -236,8 +235,8 @@ public class App extends Application {
                     });
                     throw new Exception("error: status code " + response1.statusCode());
                 }
-                UsernameResponse usernameResponse =
-                    gson.fromJson(response1.body(), UsernameResponse.class);
+                //System.out.println(response1.body());
+                UsernameResponse usernameResponse = gson.fromJson(response1.body(), UsernameResponse.class);
                 if (usernameResponse.data.length == 0) {
                     Platform.runLater(() -> {
                         boldText.setText("Username not found.");
@@ -248,18 +247,14 @@ public class App extends Application {
                 username = usernameResponse.data[0].name; // update to correct casing
                 usernameID = usernameResponse.data[0].id;
                 displayName = usernameResponse.data[0].displayName;
+                prevNames = "";
 
                 // second API call
-                String usernameHistoryURI = "https://users.roblox.com/v1/users/" +
-                usernameID + "/username-history?limit=10&sortOrder=Asc";
-                
-                HttpRequest requestIDtoPrevNames = HttpRequest.newBuilder()
+                String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
+                HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
                 .uri(URI.create(usernameHistoryURI))
                 .build();
-                
-                HttpResponse<String> response2 =
-                httpClient.send(requestIDtoPrevNames, BodyHandlers.ofString());
-                
+                HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
                 if (response2.statusCode() != 200) {
                     Platform.runLater(() -> {
                         boldText.setText("");
@@ -268,9 +263,7 @@ public class App extends Application {
                     throw new Exception("error: status code " + response2.statusCode());
                 }
                 
-                PreviousNamesResponse previousNamesResponse =
-                gson.fromJson(response2.body(), PreviousNamesResponse.class);
-                
+                PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
                 PreviousName[] pnrData = previousNamesResponse.data;
                 
                 // underline bold text also
@@ -281,7 +274,6 @@ public class App extends Application {
                     throw new Exception("no previous usernames found");
                 }
                 
-                String prevNames = "";
                 for (int i = 0; i < pnrData.length; i++) {
                     prevNames += pnrData[i].name + "\n";
                 }
@@ -303,6 +295,43 @@ public class App extends Application {
             }
         };
     }
+    
+    private void getPrevNamesFromID() throws Exception {
+        String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
+        HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
+            .uri(URI.create(usernameHistoryURI))
+            .build();
+        HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
+        if (response2.statusCode() != 200) {
+            Platform.runLater(() -> {
+                boldText.setText("");
+                regularText.setText("Error: status code " + response2.statusCode());
+            });
+            throw new Exception("error: status code " + response2.statusCode());
+        }
+        
+        PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
+        PreviousName[] pnrData = previousNamesResponse.data;
+        
+        // underline bold text also
+        Platform.runLater(setBoldTextRunnable(displayName, username));
+        
+        if (pnrData.length == 0) {
+            Platform.runLater(() -> regularText.setText("\nNo previous usernames found."));
+            throw new Exception("no previous usernames found");
+        }
+        
+        for (int i = 0; i < pnrData.length; i++) {
+            prevNames += pnrData[i].name + "\n";
+        }
+        
+        prevNameResults.setManaged(true);
+        Platform.runLater(prevNameResultsRunnable(prevNames));
+        //regularText.setStyle("-fx-underline: true;");
+        Platform.runLater(() -> regularText.setText(""));
+        regularText.setManaged(false);
+        //System.out.println(pnrData[0].name);
+    }
 
     private String formatInput(String a) {
         String fin = "";
@@ -319,11 +348,14 @@ public class App extends Application {
                 // ERROR!
             } else {
                 int start = a.indexOf("@") + 1;
-                int end = 0;            
+                int end = -1;
                 while (start != 0) { // since start is + 1
                     end = a.indexOf(" ", start);
+                    if (end == -1) { // (for last iter) there is no space at the end of the input string
+                        end = a.length();
+                    }
                     fin += "\"" + a.substring(start, end) + "\", "; // {"name", }
-                    a = a.substring(end + 1, a.length());
+                    a = a.substring(end, a.length());
                     start = a.indexOf("@") + 1;
                     System.out.println(fin);
                 }
@@ -331,6 +363,7 @@ public class App extends Application {
                 System.out.println("done: " + fin);
             }
         } catch (Exception e) {
+            System.out.println(e);
             e.printStackTrace();
         }
         return fin;
