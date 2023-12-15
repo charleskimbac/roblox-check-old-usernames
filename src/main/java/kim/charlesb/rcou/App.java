@@ -211,6 +211,7 @@ public class App extends Application {
             try {
                 //if user typed a space, change it to an underscore
                 String temp = usernameField.getText();
+                separateNames(usernameField.getText());
                 username = "";
                 for (int i = 0; i < temp.length(); i++) {
                     if (temp.charAt(i) == ' ') {
@@ -313,10 +314,34 @@ public class App extends Application {
     
     private String separateNames(String a) {
         String fin = "";
-        
-        return a;
+        try {
+            if (isAtSign(a.charAt(0))) {
+                // ERROR!
+            } else {
+                int start = a.indexOf("@") + 1;
+                int end = 0;            
+                while (start != 0) { // since start is + 1
+                    end = a.indexOf(" ", start);
+                    fin += "\"" + a.substring(start, end) + "\", "; // {"name", }
+                    a = a.substring(end + 1, a.length());
+                    start = a.indexOf("@") + 1;
+                    System.out.println(fin);
+                }
+                fin = fin.substring(0, fin.length() - 2); //remove last ", "
+                System.out.println("done: " + fin);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return fin;
     }
 
+    private static boolean isAtSign(char a) {
+        if (a == '@') {
+            return true;
+        }
+        return false;
+    }
     /**
      * Returns a Runnable that sets prevNameResults to the previous usernames received.
      * @param prevNames the String that contains the previous usernames
