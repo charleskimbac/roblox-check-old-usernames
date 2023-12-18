@@ -58,7 +58,7 @@ public class App extends Application {
     Runnable runnable;
     Alert helpAlert;
     String username;
-    long usernameID;
+    //long usernameID;
     String displayName;
     CheckBox checkBox;
     StackPane stackPane;
@@ -244,46 +244,18 @@ public class App extends Application {
                     });
                     throw new Exception("username not found");
                 }
-                username = usernameResponse.data[0].name; // update to correct casing
-                usernameID = usernameResponse.data[0].id;
+                username = usernameResponse.data[0].name; // update to correct casing                
                 displayName = usernameResponse.data[0].displayName;
                 prevNames = "";
 
                 // second API call
-                String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
-                HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
-                .uri(URI.create(usernameHistoryURI))
-                .build();
-                HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
-                if (response2.statusCode() != 200) {
-                    Platform.runLater(() -> {
-                        boldText.setText("");
-                        regularText.setText("Error: status code " + response2.statusCode());
-                    });
-                    throw new Exception("error: status code " + response2.statusCode());
+                //long usernameID = 0;
+                for (int i = 0; i < usernameResponse.data.length; i++) {
+                    //System.out.println("hi");
+                    getPrevNamesFromID(usernameResponse.data[i].id);
+                    //System.out.println("hi");
                 }
                 
-                PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
-                PreviousName[] pnrData = previousNamesResponse.data;
-                
-                // underline bold text also
-                Platform.runLater(setBoldTextRunnable(displayName, username));
-                
-                if (pnrData.length == 0) {
-                    Platform.runLater(() -> regularText.setText("\nNo previous usernames found."));
-                    throw new Exception("no previous usernames found");
-                }
-                
-                for (int i = 0; i < pnrData.length; i++) {
-                    prevNames += pnrData[i].name + "\n";
-                }
-                
-                prevNameResults.setManaged(true);
-                Platform.runLater(prevNameResultsRunnable(prevNames));
-                //regularText.setStyle("-fx-underline: true;");
-                Platform.runLater(() -> regularText.setText(""));
-                regularText.setManaged(false);
-                //System.out.println(pnrData[0].name);
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     prevNameResults.setText("");
@@ -296,41 +268,45 @@ public class App extends Application {
         };
     }
     
-    private void getPrevNamesFromID() throws Exception {
-        String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
-        HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
-            .uri(URI.create(usernameHistoryURI))
-            .build();
-        HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
-        if (response2.statusCode() != 200) {
-            Platform.runLater(() -> {
-                boldText.setText("");
-                regularText.setText("Error: status code " + response2.statusCode());
-            });
-            throw new Exception("error: status code " + response2.statusCode());
+    private void getPrevNamesFromID(long usernameID) {
+        try {
+            String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
+            HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
+                .uri(URI.create(usernameHistoryURI))
+                .build();
+            HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
+            if (response2.statusCode() != 200) {
+                Platform.runLater(() -> {
+                    boldText.setText("");
+                    regularText.setText("Error: status code " + response2.statusCode());
+                });
+                throw new Exception("error: status code " + response2.statusCode());
+            }
+            
+            PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
+            PreviousName[] pnrData = previousNamesResponse.data;
+            
+            // underline bold text also
+            Platform.runLater(setBoldTextRunnable(displayName, username));
+            
+            if (pnrData.length == 0) {
+                Platform.runLater(() -> regularText.setText("\nNo previous usernames found."));
+                throw new Exception("no previous usernames found");
+            }
+            
+            for (int i = 0; i < pnrData.length; i++) {
+                prevNames += pnrData[i].name + "\n";
+            }
+            
+            prevNameResults.setManaged(true);
+            Platform.runLater(prevNameResultsRunnable(prevNames));
+            //regularText.setStyle("-fx-underline: true;");
+            Platform.runLater(() -> regularText.setText(""));
+            regularText.setManaged(false);
+            //System.out.println(pnrData[0].name);
+        } catch (Exception e) {
+            System.out.println(e);
         }
-        
-        PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
-        PreviousName[] pnrData = previousNamesResponse.data;
-        
-        // underline bold text also
-        Platform.runLater(setBoldTextRunnable(displayName, username));
-        
-        if (pnrData.length == 0) {
-            Platform.runLater(() -> regularText.setText("\nNo previous usernames found."));
-            throw new Exception("no previous usernames found");
-        }
-        
-        for (int i = 0; i < pnrData.length; i++) {
-            prevNames += pnrData[i].name + "\n";
-        }
-        
-        prevNameResults.setManaged(true);
-        Platform.runLater(prevNameResultsRunnable(prevNames));
-        //regularText.setStyle("-fx-underline: true;");
-        Platform.runLater(() -> regularText.setText(""));
-        regularText.setManaged(false);
-        //System.out.println(pnrData[0].name);
     }
 
     private String formatInput(String a) {
