@@ -22,7 +22,6 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
@@ -47,7 +46,7 @@ public class App extends Application {
     TextField textField;
     Button submitButton;
     Button helpButton;
-    Label prevNameResults;
+    //Label prevNameResults;
     HttpClient httpClient;
     Gson gson;
     TextFlow directionsTextFlow;
@@ -98,12 +97,12 @@ public class App extends Application {
 
         resultLayer = new VBox();
         resultLayer.setAlignment(Pos.CENTER);
-
+/*
         prevNameResults = new Label();
         prevNameResults.setStyle("-fx-text-alignment: center;");
         
         prevNameResults.setManaged(false); // so initial app launch text is centered since this is empty
-
+*/
         directionsTextFlow = new TextFlow();
         directionsTextFlow.setStyle("-fx-text-alignment: center;");
 
@@ -152,7 +151,7 @@ public class App extends Application {
     public void init() {
         stackPane.getChildren().addAll(textField, checkBox);
         interactLayer.getChildren().addAll(stackPane, helpButton, submitButton);
-        resultLayer.getChildren().addAll(directionsTextFlow, prevNameResults);
+        resultLayer.getChildren().addAll(directionsTextFlow); //prevNameResults);
         directionsTextFlow.getChildren().addAll(boldText, regularText);
         root.getChildren().addAll(interactLayer, resultLayer, pb);
 
@@ -161,7 +160,7 @@ public class App extends Application {
                 Thread thread = new Thread(runnable);
                 thread.setDaemon(true);
                 thread.start();
-            } else if (event.getCode().getName().equals("ALT")) {
+            } else if (event.getCode().getName().equals("Alt")) {
                 if (checkBox.isSelected() == true) {
                     checkBox.setSelected(false);
                 } else {
@@ -201,8 +200,9 @@ public class App extends Application {
     private Runnable doAPIcallsRunnable() {
         return () -> {
             Platform.runLater(() -> { // default values
-                regularText.setStyle("");                
-                regularText.setManaged(true); // so everything is centered when regularText is empty
+                //regularText.setStyle("");                
+                //regularText.setManaged(true); // so everything is centered when regularText is empty
+                regularText.setText("Loading...");
             });
             try {
                 /*
@@ -240,7 +240,7 @@ public class App extends Application {
                 if (usernameResponse.data.length == 0) {
                     Platform.runLater(() -> {
                         boldText.setText("Username not found.");
-                        regularText.setText("\nPlease check and try again.");
+                        regularText.setText("Please check and try again.");
                     });
                     throw new Exception("username not found");
                 }
@@ -257,10 +257,6 @@ public class App extends Application {
                 }
                 
             } catch (Exception e) {
-                Platform.runLater(() -> {
-                    prevNameResults.setText("");
-                    prevNameResults.setManaged(false);
-                });
                 System.out.println(e);
             } finally {
                 Platform.runLater(() -> stage.sizeToScene());
@@ -277,7 +273,7 @@ public class App extends Application {
             HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
             if (response2.statusCode() != 200) {
                 Platform.runLater(() -> {
-                    boldText.setText("");
+                    setBoldText("");
                     regularText.setText("Error: status code " + response2.statusCode());
                 });
                 throw new Exception("error: status code " + response2.statusCode());
@@ -290,22 +286,25 @@ public class App extends Application {
             Platform.runLater(setBoldTextRunnable(displayName, username));
             
             if (pnrData.length == 0) {
-                Platform.runLater(() -> regularText.setText("\nNo previous usernames found."));
+                Platform.runLater(() -> regularText.setText("No previous usernames found."));
                 throw new Exception("no previous usernames found");
             }
             
-            for (int i = 0; i < pnrData.length; i++) {
+            for (int i = 0; i < pnrData.length - 1; i++) {
                 prevNames += pnrData[i].name + "\n";
             }
+            prevNames += pnrData[pnrData.length - 1].name; //last index no "\n"
             
-            prevNameResults.setManaged(true);
+            //prevNameResults.setManaged(true);
             Platform.runLater(prevNameResultsRunnable(prevNames));
             //regularText.setStyle("-fx-underline: true;");
-            Platform.runLater(() -> regularText.setText(""));
-            regularText.setManaged(false);
+            //Platform.runLater(() -> regularText.setText(""));
+            //regularText.setManaged(false);
             //System.out.println(pnrData[0].name);
         } catch (Exception e) {
             System.out.println(e);
+        } finally {
+            Platform.runLater(() -> stage.sizeToScene());
         }
     }
 
@@ -316,7 +315,7 @@ public class App extends Application {
         }
         return a;
     }
-    
+
     private String separateNames(String a) {
         String fin = "";
         try {
@@ -357,7 +356,7 @@ public class App extends Application {
      * @return a Runnable that sets prevNameResults to the previous usernames received
      */
     private Runnable prevNameResultsRunnable(String prevNames) {
-        return () -> prevNameResults.setText(prevNames);
+        return () -> regularText.setText(prevNames); //prevNameResults.setText(prevNames);
     }
 
     /**
@@ -368,8 +367,20 @@ public class App extends Application {
      */
     private Runnable setBoldTextRunnable(String displayName, String username) {
         return () -> {
-            boldText.setText(displayName + " (@" + username + ")");
+            boldText.setText(displayName + " (@" + username + ")\n");
             boldText.setStyle("-fx-underline: true; -fx-font-weight: bold;");
         };
+    }
+
+    private void setBoldText(String a) {
+        Platform.runLater(() -> {
+            boldText.setText(a + "\n");
+        });
+    }
+
+    private void setRegularText(String a) {
+        Platform.runLater(() -> {
+            regularText.setText(a);
+        });
     }
 } // ApiApp
