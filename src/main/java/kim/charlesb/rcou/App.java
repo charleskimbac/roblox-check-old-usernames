@@ -29,6 +29,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.TilePane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -58,13 +59,13 @@ public class App extends Application {
     BorderPane progressBarLayer;
     Runnable runnable;
     Alert helpAlert;
-    String username;
     String displayName;
     CheckBox checkBox;
     StackPane stackPane;
     String prevNames;
     HBox checkBoxLayer;
     Separator separator;
+    TilePane tilePane;
     
     /**
     * Constructs an {@code App} object. This default (i.e., no argument)
@@ -158,6 +159,8 @@ public class App extends Application {
         separator = new Separator();
         separator.setPadding(new Insets(0, 4, 0, 4));
         HBox.setHgrow(separator, Priority.ALWAYS);
+
+        //tilePane made in submitButton onAction
     } // ApiApp
     
     /** {@inheritDoc} */
@@ -186,6 +189,9 @@ public class App extends Application {
         });
         
         submitButton.setOnAction((event -> {
+            tilePane = new TilePane();
+            tilePane.setHgap(4);
+            tilePane.setPrefColumns(4);
             Thread thread = new Thread(runnable);
             thread.setDaemon(true);
             thread.start();
@@ -217,9 +223,9 @@ public class App extends Application {
         return () -> {
             submitButton.setDisable(true);
             System.out.println(textField.getWidth());
-            //7chars !!!!
             try {
                 String inputFormatted = "";
+                String username = "";
                 if (checkBox.isSelected()) {
                     System.out.println("OCR mode");
                     inputFormatted = separateNames(textField.getText());
@@ -247,18 +253,18 @@ public class App extends Application {
                 .build();
 
                 HttpResponse<String> response1 = httpClient.send(usernameToIDRequest, BodyHandlers.ofString());
+                UsernameResponse usernameResponse = gson.fromJson(response1.body(), UsernameResponse.class);
+
                 if (response1.statusCode() != 200) {
                     setBoldText("");
                     setRegularText("Error: status code " + response1.statusCode());
                     throw new Exception("error: status code " + response1.statusCode());
                 }
 
-                //System.out.println(response1.body());
-                UsernameResponse usernameResponse = gson.fromJson(response1.body(), UsernameResponse.class);
                 if (usernameResponse.data.length == 0) {
-                    setBoldText("Username not found.");
+                    setBoldText("Username(s) not found.");
                     setRegularText("Please check and try again.");
-                    throw new Exception("username not found: " + inputFormatted);
+                    throw new Exception("username(s) not found: " + inputFormatted);
                 }
                 username = usernameResponse.data[0].name; // update to correct casing                
                 displayName = usernameResponse.data[0].displayName;
@@ -267,7 +273,7 @@ public class App extends Application {
                 // second API call
                 // for every user responded with
                 for (int i = 0; i < usernameResponse.data.length; i++) {
-                    getPrevNamesFromID(usernameResponse.data[i].id);
+                    getPrevNamesFromID(usernameResponse.data[i].id, usernameResponse.data[i].name);
                 }
             } catch (Exception e) {
                 Platform.runLater(() -> {
@@ -276,22 +282,21 @@ public class App extends Application {
                     stage.sizeToScene();
                 });
                 System.out.println(e);
-                System.out.println();
             } finally {
                 System.out.println();
             }
         };
     }
     
-    private void getPrevNamesFromID(long usernameID) {
+    private void getPrevNamesFromID(long usernameID, String username) {
         try {
             String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
             HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
             .uri(URI.create(usernameHistoryURI))
             .build();
             HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
-            if (response2.statusCode() != 200) {
-                
+            
+            if (response2.statusCode() != 200) {                
                 setBoldText("");
                 setRegularText("Error: status code " + response2.statusCode());
                 
