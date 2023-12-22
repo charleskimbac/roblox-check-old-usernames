@@ -51,10 +51,7 @@ public class App extends Application {
     Button helpButton;
     HttpClient httpClient;
     Gson gson;
-    TextFlow directionsTextFlow;
-    Text boldText;
-    Text regularText;
-    VBox resultLayer;
+    TextFlow textFlow;
     ProgressBar progressBar; //progressBar for aesthetics :)
     BorderPane progressBarLayer;
     Runnable runnable;
@@ -62,10 +59,10 @@ public class App extends Application {
     String displayName;
     CheckBox checkBox;
     StackPane stackPane;
-    String prevNames;
     HBox checkBoxLayer;
     Separator separator;
     TilePane tilePane;
+    int searchCount;
     
     /**
     * Constructs an {@code App} object. This default (i.e., no argument)
@@ -98,18 +95,9 @@ public class App extends Application {
         helpButton.setMaxWidth(25);
         helpButton.setMinHeight(25);
         helpButton.setMaxHeight(25);
-        
-        resultLayer = new VBox();
-        resultLayer.setAlignment(Pos.CENTER);
-        
-        directionsTextFlow = new TextFlow();
-        directionsTextFlow.setStyle("-fx-text-alignment: center;");
-        
-        boldText = new Text("");
-        //boldText.setStyle("-fx-font-weight: bold;");
-        boldText.setStyle("-fx-underline: true; -fx-font-weight: bold;");
-        
-        regularText = new Text("Submit a Roblox username to" + "\n" + "see their previous usernames.");
+
+        textFlow = new TextFlow();
+        textFlow.setStyle("-fx-text-alignment: center;");
         
         httpClient = HttpClient.newBuilder()
         .version(Version.HTTP_2)
@@ -138,16 +126,17 @@ public class App extends Application {
         "                     " + "-=[ SINGLE-SEARCH MODE (default) ]=-" + "\n" +
         "- Spaces entered into the search box will be converted into an underscore." + "\n" +
         "\n" +
-        "                                 " + "-=[ OCR MODE ]=-" + "\n",
+        "                                 " + "-=[ OCR MODE ]=-" + "\n" +
+        "The search should be formatted as \"displayName1 @username1 displayName2 @username2 etc...\"" + "\n" +
+        "It is recommended to use Copilot/Bing AI to abstract the text from a screenshot of the Roblox player menu (ESC).",
         ButtonType.OK
         );
         helpAlert.setTitle("Directions & Help");
         helpAlert.setHeaderText("Directions & Help");
         
-        runnable = doAPIcallsRunnable();
+        runnable = beginSearchRunnable();
         
         checkBox = new CheckBox("OCR");
-        //checkBox.setPadding(new Insets(0, 7, 0, 0)); //7 away from left border of textField
         
         stackPane = new StackPane();
         StackPane.setAlignment(checkBox, Pos.CENTER_RIGHT);
@@ -160,26 +149,34 @@ public class App extends Application {
         separator.setPadding(new Insets(0, 4, 0, 4));
         HBox.setHgrow(separator, Priority.ALWAYS);
 
-        //tilePane made in submitButton onAction
+        tilePane = new TilePane();
+        tilePane.setPadding(new Insets(6));
+        tilePane.setHgap(20);
+        tilePane.setVgap(8);
+        tilePane.setPrefColumns(1); //1 by default since only 1 TextFlow initially, changed to 4 later (if searchCount > 4)
+        tilePane.setAlignment(Pos.CENTER); //if < 4 TextFlows, then center. but > 4, centerleft
     } // ApiApp
     
     /** {@inheritDoc} */
     @Override
     public void init() {
-        //stackPane.getChildren().addAll(textField, checkBox);
         interactLayer.getChildren().addAll(textField, helpButton, submitButton);
-        resultLayer.getChildren().addAll(directionsTextFlow); //prevNameResults);
-        directionsTextFlow.getChildren().addAll(boldText, regularText);
+
+        Text boldUnderlineText = new Text("");        
+        boldUnderlineText.setStyle("-fx-underline: true; -fx-font-weight: bold;");
+        Text regularText = new Text("Submit a Roblox username to" + "\n" + "see their previous usernames.");
+        textFlow.getChildren().addAll(boldUnderlineText, regularText);
+
         checkBoxLayer.getChildren().addAll(checkBox);
         progressBarLayer.setBottom(progressBar);
-        root.getChildren().addAll(interactLayer, checkBoxLayer, separator, resultLayer, progressBarLayer);
+        tilePane.getChildren().addAll(textFlow); //initial message
+        root.getChildren().addAll(interactLayer, checkBoxLayer, separator, tilePane, progressBarLayer);
         
         textField.setOnKeyPressed(event -> {
-            if (event.getCode().getName().equals("Enter")) {
-                Thread thread = new Thread(runnable);
-                thread.setDaemon(true);
-                thread.start();
-            } else if (event.getCode().getName().equals("Alt")) {
+            String eventCodeName = event.getCode().getName();
+            if (eventCodeName.equals("Enter")) {
+                startSearch();
+            } else if (eventCodeName.equals("Alt")) {
                 if (checkBox.isSelected() == true) {
                     checkBox.setSelected(false);
                 } else {
@@ -189,12 +186,7 @@ public class App extends Application {
         });
         
         submitButton.setOnAction((event -> {
-            tilePane = new TilePane();
-            tilePane.setHgap(4);
-            tilePane.setPrefColumns(4);
-            Thread thread = new Thread(runnable);
-            thread.setDaemon(true);
-            thread.start();
+            startSearch();
         }));
         
         helpButton.setOnAction((event) -> {
@@ -212,17 +204,27 @@ public class App extends Application {
         stage.sizeToScene();
         stage.show();
     } // start
+
+    /**
+     * Does precondition of making a new TilePane, then opens a new thread to start finding previous usernames.
+     */
+    private void startSearch() {
+        tilePane.getChildren().clear();
+        Thread thread = new Thread(runnable);
+        thread.setDaemon(true);
+        thread.start();
+    }
     
     /**
-    * Returns a Runnable that takes in a user-specified username, then
-    * requests for the userID for that username. Then, requests for all
-    * of the previous usernames for that userID. Presents the data accordingly.
+    * Returns a Runnable that takes in the user-specified username(s), then
+    * requests for their respective userID(s). Calls the next method (display previous usernames)
+    * for each userID found.
     * @return Runnable for a thread to execute
     */
-    private Runnable doAPIcallsRunnable() {
+    private Runnable beginSearchRunnable() {
         return () -> {
             submitButton.setDisable(true);
-            System.out.println(textField.getWidth());
+            //System.out.println(tilePane.getWidth());
             try {
                 String inputFormatted = "";
                 String username = "";
@@ -256,29 +258,31 @@ public class App extends Application {
                 UsernameResponse usernameResponse = gson.fromJson(response1.body(), UsernameResponse.class);
 
                 if (response1.statusCode() != 200) {
-                    setBoldText("");
-                    setRegularText("Error: status code " + response1.statusCode());
+                    addPreviousNameViewer("", "Error 1/2: status code " + response1.statusCode());
                     throw new Exception("error: status code " + response1.statusCode());
                 }
 
-                if (usernameResponse.data.length == 0) {
-                    setBoldText("Username(s) not found.");
-                    setRegularText("Please check and try again.");
+                searchCount = usernameResponse.data.length;
+
+                if (searchCount == 0) {
+                    addPreviousNameViewer("Username(s) not found.", "Please check and try again.");
                     throw new Exception("username(s) not found: " + inputFormatted);
+                } else if (searchCount < 4) {
+                    tilePane.setPrefColumns(searchCount);
+                    tilePane.setAlignment(Pos.CENTER);
+                } else {
+                    tilePane.setPrefColumns(4);
+                    tilePane.setAlignment(Pos.CENTER_LEFT);
                 }
-                username = usernameResponse.data[0].name; // update to correct casing                
-                displayName = usernameResponse.data[0].displayName;
-                prevNames = "";
-                
+
                 // second API call
-                // for every user responded with
+                // for every userID found
                 for (int i = 0; i < usernameResponse.data.length; i++) {
-                    getPrevNamesFromID(usernameResponse.data[i].id, usernameResponse.data[i].name);
+                    getPrevNamesFromID(usernameResponse.data[i].id, usernameResponse.data[i].name, usernameResponse.data[i].displayName);
                 }
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     submitButton.setDisable(false);
-                    System.out.println("regularText: " + regularText.getText());
                     stage.sizeToScene();
                 });
                 System.out.println(e);
@@ -288,7 +292,16 @@ public class App extends Application {
         };
     }
     
-    private void getPrevNamesFromID(long usernameID, String username) {
+    /**
+     * Finds the previous usernames given the usernameID, then makes a PreviousNameViewer 
+     * to show in the TilePane for each usernameID.
+     * @param usernameID
+     * @param username
+     * @param displayName
+     */
+    private void getPrevNamesFromID(long usernameID, String username, String displayName) {
+        String bold = "";
+        String regular = "";
         try {
             String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
             HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
@@ -297,53 +310,49 @@ public class App extends Application {
             HttpResponse<String> response2 = httpClient.send(prevNamesFromIDRequest, BodyHandlers.ofString());
             
             if (response2.statusCode() != 200) {                
-                setBoldText("");
-                setRegularText("Error: status code " + response2.statusCode());
-                
+                addPreviousNameViewer("", "Error 2/2: status code " + response2.statusCode());
                 throw new Exception("error: status code " + response2.statusCode());
             }
             
             PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
             PreviousName[] pnrData = previousNamesResponse.data;
             
-            
-            setBoldText(displayName + " (@" + username + ")");
+            bold = displayName + " (@" + username + ")";
+            regular = "";
             
             if (pnrData.length == 0) {
-                setRegularText("No previous usernames found.");
+                regular = "No previous usernames found.";
                 throw new Exception("no previous usernames found");
             }
             
             for (int i = 0; i < pnrData.length - 1; i++) {
-                prevNames += pnrData[i].name + "\n";
+                regular += pnrData[i].name + "\n";
             }
-            prevNames += pnrData[pnrData.length - 1].name; //last index no "\n"
-            
-            setRegularText(prevNames);
+            regular += pnrData[pnrData.length - 1].name; //last index no "\n"
         } catch (Exception e) {
             System.out.println(e);
         } finally {
+            addPreviousNameViewer(bold, regular);
+            //System.out.println("bold: " + bold);
             Platform.runLater(() -> {
-                submitButton.setDisable(false);
-                System.out.println("regularText: " + regularText.getText());
+                submitButton.setDisable(false);                
                 stage.sizeToScene();
             });
         }
     }
     
-    private String formatInput(String a) {
-        String fin = "";
-        if (checkBox.isSelected() == true) {
-            fin = separateNames(a);
-        }
-        return a;
+    private void addPreviousNameViewer(String bold, String regular) {
+        Platform.runLater(() -> {
+            PreviousNameViewer previousNameViewer = new PreviousNameViewer(bold, regular);
+            tilePane.getChildren().addAll(previousNameViewer);
+        });
     }
-    
+
     private String separateNames(String a) {
         String fin = "";
         try {
-            if (isAtSign(a.charAt(0))) {
-                // ERROR!
+            if (a.charAt(0) == '@') {
+                System.out.println("wrong format!");
             } else {
                 int start = a.indexOf("@") + 1;
                 int end = -1;
@@ -365,24 +374,5 @@ public class App extends Application {
             e.printStackTrace();
         }
         return fin;
-    }
-    
-    private static boolean isAtSign(char a) {
-        if (a == '@') {
-            return true;
-        }
-        return false;
-    }
-    
-    private void setBoldText(String a) {
-        Platform.runLater(() -> {
-            boldText.setText(a + "\n");
-        });
-    }
-    
-    private void setRegularText(String a) {
-        Platform.runLater(() -> {
-            regularText.setText(a);
-        });
     }
 } // ApiApp

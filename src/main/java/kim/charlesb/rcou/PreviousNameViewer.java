@@ -5,15 +5,16 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 
 class PreviousNameViewer extends VBox {
-    private VBox root;
     private TextFlow textFlow;
-    private Text boldText;
+    private Text boldUnderlineText;
     private Text normalText;
     
     public PreviousNameViewer(String bold, String normal) {
-        boldText.setText(normal);
-        normalText.setText("\n" + normal);
-        textFlow.getChildren().addAll(boldText, normalText);
-        root.getChildren().addAll(textFlow);
+        boldUnderlineText = new Text(bold);
+        boldUnderlineText.setStyle("-fx-underline: true; -fx-font-weight: bold;");
+        normalText = new Text("\n" + normal);
+        textFlow = new TextFlow(boldUnderlineText, normalText);
+        textFlow.setStyle("-fx-text-alignment: center;");
+        this.getChildren().addAll(textFlow);
     }
 }
