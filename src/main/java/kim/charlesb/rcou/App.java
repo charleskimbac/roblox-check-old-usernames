@@ -1,5 +1,6 @@
 package kim.charlesb.rcou;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpClient.Redirect;
@@ -8,6 +9,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.util.ArrayList;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -56,17 +58,15 @@ public class App extends Application {
     BorderPane progressBarLayer;
     Runnable runnable;
     Alert helpAlert;
-    String displayName;
     CheckBox checkBox;
     StackPane stackPane;
     HBox checkBoxLayer;
     Separator separator;
     TilePane tilePane;
-    int searchCount;
+    int previousNameShowLimit;
     
     /**
-    * Constructs an {@code App} object. This default (i.e., no argument)
-    * constructor is executed in Step 2 of the JavaFX Application Life-Cycle.
+    * Constructs an {@code App} object.
     */
     public App() {
         root = new VBox(6);
@@ -120,15 +120,19 @@ public class App extends Application {
         
         //tried to increase setWidth to make each tip be one line, but the width isnt working for the first show()
         helpAlert = new Alert(AlertType.CONFIRMATION,
-        "- Submit a Roblox username (not their display name) to see their previous usernames." + "\n" +
-        "- Press Enter while in the search box to instantly search." + "\n" +
+        "Submit Roblox username(s) (not their display name) into the text field to see their previous usernames. \n" +
+        "Press Enter while in the search box to instantly search. \n" +
         "\n" +
-        "                     " + "-=[ SINGLE-SEARCH MODE (default) ]=-" + "\n" +
-        "- Spaces entered into the search box will be converted into an underscore." + "\n" +
+        "                     " + "-=[ SINGLE-SEARCH MODE (default) ]=- \n" +
+        "- Spaces entered into the search box will be converted into an underscore. \n" +
         "\n" +
         "                                 " + "-=[ OCR MODE ]=-" + "\n" +
-        "The search should be formatted as \"displayName1 @username1 displayName2 @username2 etc...\"" + "\n" +
-        "It is recommended to use Copilot/Bing AI to abstract the text from a screenshot of the Roblox player menu (ESC).",
+        "- The search should be formatted as `displayName1 @username1 displayName2 @username2 etc...` \n" +
+        "- It is recommended to use Copilot/Bing AI to abstract the text from a screenshot of the Roblox player (`ESC`) menu. \n" +
+        "- Recommended prompt: \"Give me all of the text in the image in plain text and in one line. " +
+            "Make sure to include the parts with the '@' sign. Do not use commas, but separate each word with a space.\" \n" +
+        "\n" +
+        "https://github.com/charleskimbac/roblox-check-old-usernames",
         ButtonType.OK
         );
         helpAlert.setTitle("Directions & Help");
@@ -150,11 +154,13 @@ public class App extends Application {
         HBox.setHgrow(separator, Priority.ALWAYS);
 
         tilePane = new TilePane();
-        tilePane.setPadding(new Insets(6));
+        tilePane.setPadding(new Insets(10, 4, 10, 4));
         tilePane.setHgap(20);
         tilePane.setVgap(8);
-        tilePane.setPrefColumns(1); //1 by default since only 1 TextFlow initially, changed to 4 later (if searchCount > 4)
+        tilePane.setPrefColumns(1); //1 by default since only 1 TextFlow initially, changed to 4 later (if count > 4)
         tilePane.setAlignment(Pos.CENTER); //if < 4 TextFlows, then center. but > 4, centerleft
+
+        previousNameShowLimit = 5; //5 by default
     } // ApiApp
     
     /** {@inheritDoc} */
@@ -172,7 +178,7 @@ public class App extends Application {
         tilePane.getChildren().addAll(textFlow); //initial message
         root.getChildren().addAll(interactLayer, checkBoxLayer, separator, tilePane, progressBarLayer);
         
-        textField.setOnKeyPressed(event -> {
+        root.setOnKeyPressed(event -> {
             String eventCodeName = event.getCode().getName();
             if (eventCodeName.equals("Enter")) {
                 startSearch();
@@ -206,10 +212,14 @@ public class App extends Application {
     } // start
 
     /**
-     * Does precondition of making a new TilePane, then opens a new thread to start finding previous usernames.
+     * Empties existing TilePane, then opens a new thread to start finding previous usernames.
      */
     private void startSearch() {
-        tilePane.getChildren().clear();
+        if (submitButton.isDisabled()) { //if already running
+            return;
+        }
+        submitButton.setDisable(true);
+        tilePane.getChildren().clear(); //reset tilePane
         Thread thread = new Thread(runnable);
         thread.setDaemon(true);
         thread.start();
@@ -223,78 +233,106 @@ public class App extends Application {
     */
     private Runnable beginSearchRunnable() {
         return () -> {
-            submitButton.setDisable(true);
-            //System.out.println(tilePane.getWidth());
-            try {
-                String inputFormatted = "";
-                String username = "";
-                if (checkBox.isSelected()) {
-                    System.out.println("OCR mode");
-                    inputFormatted = separateNames(textField.getText());
-                } else {
-                    System.out.println("single-search mode");
-                    //if user typed a space, change it to an underscore
-                    String temp = textField.getText();
-                    
-                    username = "";
-                    for (int i = 0; i < temp.length(); i++) {
-                        if (temp.charAt(i) == ' ') {
-                            username += '_';
-                        } else {
-                            username += temp.charAt(i);
-                        }
+            String[] input = new String[0];
+            if (checkBox.isSelected()) {
+                input = separateNames(textField.getText());
+                if (input.length == 0) { //if ocr mode is checked or input is in bad format
+                    addPreviousNameViewer("An error occurred.", "Double check the search mode or search format.");
+                    updateTilePaneColumnsAlignment(1);
+                    Platform.runLater(() -> {
+                        disableButton();
+                        stage.sizeToScene();
+                    });
+                    return;
+                }
+            } else {
+                //if user typed a space, change it to an underscore
+                String actual = textField.getText();
+                if (actual.length() > 25) { //single search terms should be less than 25chars
+                    addPreviousNameViewer("An error occurred.", "Double check the search mode or search format.");
+                    updateTilePaneColumnsAlignment(1);
+                    Platform.runLater(() -> {
+                        disableButton();          
+                        stage.sizeToScene();
+                    });
+                    return;
+                }
+                String converted = "";
+                for (int i = 0; i < actual.length(); i++) {
+                    if (actual.charAt(i) == ' ') {
+                        converted += '_';
+                    } else {
+                        converted += actual.charAt(i);
                     }
-                    inputFormatted = "\"" + username + "\"";
                 }
-                String requestBody = "{\"usernames\": [" + inputFormatted + "], \"excludeBannedUsers\": true}";
-                HttpRequest usernameToIDRequest = HttpRequest.newBuilder()
-                .uri(URI.create("https://users.roblox.com/v1/usernames/users"))
-                .header("Content-Type", "application/json")
-                .header("accept", "application/json")
-                .POST(BodyPublishers.ofString(requestBody))
-                .build();
-
-                HttpResponse<String> response1 = httpClient.send(usernameToIDRequest, BodyHandlers.ofString());
-                UsernameResponse usernameResponse = gson.fromJson(response1.body(), UsernameResponse.class);
-
-                if (response1.statusCode() != 200) {
-                    addPreviousNameViewer("", "Error 1/2: status code " + response1.statusCode());
-                    throw new Exception("error: status code " + response1.statusCode());
-                }
-
-                searchCount = usernameResponse.data.length;
-
-                if (searchCount == 0) {
-                    addPreviousNameViewer("Username(s) not found.", "Please check and try again.");
-                    throw new Exception("username(s) not found: " + inputFormatted);
-                } else if (searchCount < 4) {
-                    tilePane.setPrefColumns(searchCount);
-                    tilePane.setAlignment(Pos.CENTER);
-                } else {
-                    tilePane.setPrefColumns(4);
-                    tilePane.setAlignment(Pos.CENTER_LEFT);
-                }
-
-                // second API call
-                // for every userID found
-                for (int i = 0; i < usernameResponse.data.length; i++) {
-                    getPrevNamesFromID(usernameResponse.data[i].id, usernameResponse.data[i].name, usernameResponse.data[i].displayName);
-                }
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    submitButton.setDisable(false);
-                    stage.sizeToScene();
-                });
-                System.out.println(e);
-            } finally {
-                System.out.println();
+                input = new String[]{converted};
             }
+            
+            int count = input.length;
+            updateTilePaneColumnsAlignment(count);
+            
+            for (int i = 0; i < count; i++) {
+                try {
+                    String requestBody = "{\"usernames\": [\"" + input[i] + "\"], \"excludeBannedUsers\": true}";
+                    HttpRequest usernameToIDRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("https://users.roblox.com/v1/usernames/users"))
+                    .header("Content-Type", "application/json")
+                    .header("accept", "application/json")
+                    .POST(BodyPublishers.ofString(requestBody))
+                    .build();
+                    
+                    HttpResponse<String> response1 = httpClient.send(usernameToIDRequest, BodyHandlers.ofString());
+                    UsernameResponse usernameResponse = gson.fromJson(response1.body(), UsernameResponse.class);
+                    
+                    if (response1.statusCode() != 200) {
+                        addPreviousNameViewer("", "Error 1/2: status code " + response1.statusCode());
+                    } else {
+                        if (usernameResponse.data.length == 0) {
+                            addPreviousNameViewer("@" + input[i] + " not found.", "Please check and try again.");
+                            continue;
+                        }
+                        // second API call
+                        getPrevNamesFromID(usernameResponse.data[0].id, usernameResponse.data[0].name, usernameResponse.data[0].displayName);
+                    }
+                } catch (IOException|InterruptedException e) {
+                    System.out.println(e);
+                    Platform.runLater(() -> {
+                        disableButton();
+                        stage.sizeToScene();
+                    });
+                }
+            }
+            Platform.runLater(() -> disableButton());
         };
     }
     
     /**
-     * Finds the previous usernames given the usernameID, then makes a PreviousNameViewer 
-     * to show in the TilePane for each usernameID.
+    * Disables the submit button and requests focus for the text field, since
+    * by default it will change focus to the next checkbox, which is annoying
+    */
+    public void disableButton() {
+        submitButton.setDisable(false);
+        textField.requestFocus();
+    }
+    
+    /**
+     * Changes tilePane prefColumns and alignment to ensure no extra empty space is present if count < 4.
+     * @param count number of tilePane children to be added
+     */
+    private void updateTilePaneColumnsAlignment(int count) {
+        Platform.runLater(() -> {
+            if (count < 4) {
+                tilePane.setPrefColumns(count); //so no extra space is present
+                tilePane.setAlignment(Pos.CENTER);
+            } else {
+                tilePane.setPrefColumns(4);
+                tilePane.setAlignment(Pos.CENTER_LEFT);
+            }
+        });
+    }
+    
+    /**
+     * Finds the previous usernames given the usernameID, then calls addPreviousNameViewer().
      * @param usernameID
      * @param username
      * @param displayName
@@ -303,7 +341,7 @@ public class App extends Application {
         String bold = "";
         String regular = "";
         try {
-            String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?limit=10&sortOrder=Asc";
+            String usernameHistoryURI = "https://users.roblox.com/v1/users/" + usernameID + "/username-history?sortOrder=Asc&limit=100";
             HttpRequest prevNamesFromIDRequest = HttpRequest.newBuilder()
             .uri(URI.create(usernameHistoryURI))
             .build();
@@ -311,68 +349,69 @@ public class App extends Application {
             
             if (response2.statusCode() != 200) {                
                 addPreviousNameViewer("", "Error 2/2: status code " + response2.statusCode());
-                throw new Exception("error: status code " + response2.statusCode());
+                throw new IOException("Error 2/2: status code " + response2.statusCode());
             }
             
             PreviousNamesResponse previousNamesResponse = gson.fromJson(response2.body(), PreviousNamesResponse.class);
             PreviousName[] pnrData = previousNamesResponse.data;
             
             bold = displayName + " (@" + username + ")";
-            regular = "";
             
             if (pnrData.length == 0) {
                 regular = "No previous usernames found.";
-                throw new Exception("no previous usernames found");
+            } else {
+                for (int i = 0; i < previousNameShowLimit && i < pnrData.length; i++) { //up to previousNameShowLimit shown
+                    regular += pnrData[i].name + "\n";
+                    if (i == previousNameShowLimit - 1 && pnrData.length > previousNameShowLimit) { //if there are more than previousNameShowLimit, show how many more
+                        regular += "+" + (pnrData.length - previousNameShowLimit) + "  "; //+2 spaces for next line
+                    }
+                }
+                regular.substring(0, regular.length() - 2); //remove last newline
             }
-            
-            for (int i = 0; i < pnrData.length - 1; i++) {
-                regular += pnrData[i].name + "\n";
-            }
-            regular += pnrData[pnrData.length - 1].name; //last index no "\n"
-        } catch (Exception e) {
+            addPreviousNameViewer(bold, regular);
+        } catch (IOException|InterruptedException e) {
             System.out.println(e);
         } finally {
-            addPreviousNameViewer(bold, regular);
-            //System.out.println("bold: " + bold);
-            Platform.runLater(() -> {
-                submitButton.setDisable(false);                
+            Platform.runLater(() -> {             
                 stage.sizeToScene();
             });
         }
     }
     
+    /**
+     * Adds a PreviousNameViewer to the tilePane.
+     * @param bold
+     * @param regular
+     */
     private void addPreviousNameViewer(String bold, String regular) {
         Platform.runLater(() -> {
             PreviousNameViewer previousNameViewer = new PreviousNameViewer(bold, regular);
             tilePane.getChildren().addAll(previousNameViewer);
         });
     }
-
-    private String separateNames(String a) {
-        String fin = "";
-        try {
-            if (a.charAt(0) == '@') {
-                System.out.println("wrong format!");
-            } else {
-                int start = a.indexOf("@") + 1;
-                int end = -1;
-                while (start != 0) { // since start is + 1
-                    end = a.indexOf(" ", start);
-                    if (end == -1) { // (for last iter) there is no space at the end of the input string
-                        end = a.length();
-                    }
-                    fin += "\"" + a.substring(start, end) + "\", "; // {"name", }
-                    a = a.substring(end, a.length());
-                    start = a.indexOf("@") + 1;
-                    //System.out.println(fin);
+    
+    /**
+     * Separates the input string into an array of usernames only.
+     * @param a
+     * @return
+     */
+    private String[] separateNames(String a) {
+        ArrayList<String> fin = new ArrayList<>();
+        if (a.charAt(0) == '@') {
+            System.out.println("wrong format!");       //IMPLEMENT!!!!!
+        } else {
+            int start = a.indexOf("@") + 1;
+            int end = -1;
+            while (start != 0) { // since start is + 1
+                end = a.indexOf(" ", start);
+                if (end == -1) { // (for last iter) there is no space at the end of the input string
+                    end = a.length();
                 }
-                fin = fin.substring(0, fin.length() - 2); //remove last ", "
-                System.out.println("done: " + fin);
+                fin.add(a.substring(start, end));
+                a = a.substring(end, a.length());
+                start = a.indexOf("@") + 1;
             }
-        } catch (Exception e) {
-            System.out.println(e);
-            e.printStackTrace();
         }
-        return fin;
+        return fin.toArray(new String[0]);
     }
 } // ApiApp
