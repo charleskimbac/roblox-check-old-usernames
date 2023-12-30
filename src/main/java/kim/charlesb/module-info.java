@@ -1,9 +1,9 @@
 module kim.charlesb.rcouModule {
-    requires transitive java.logging;
-    requires transitive java.net.http;
-    requires transitive javafx.controls;
-    requires transitive javafx.fxml;
-    requires transitive javafx.web;
-    requires transitive com.google.gson;
+    requires java.logging;
+    requires java.net.http;
+    requires javafx.controls;
+    requires javafx.fxml;
+    requires javafx.web;
+    requires com.google.gson;
     opens kim.charlesb.rcou;
 } // module

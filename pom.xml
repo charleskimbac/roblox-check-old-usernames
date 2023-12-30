@@ -51,17 +51,17 @@
     <dependency>
       <groupId>org.openjfx</groupId>
       <artifactId>javafx-controls</artifactId>
-      <version>${openjfx.version}</version>
+      <version>21.0.1</version>
     </dependency>
     <dependency>
       <groupId>org.openjfx</groupId>
       <artifactId>javafx-fxml</artifactId>
-      <version>${openjfx.version}</version>
+      <version>21.0.1</version>
     </dependency>
     <dependency>
       <groupId>org.openjfx</groupId>
       <artifactId>javafx-web</artifactId>
-      <version>${openjfx.version}</version>
+      <version>21.0.1</version>
     </dependency>
     <dependency>
       <groupId>com.google.code.gson</groupId>
@@ -128,6 +128,13 @@
         <plugin>
           <artifactId>maven-jar-plugin</artifactId>
           <version>3.3.0</version>
+          <configuration>
+                <archive>
+                    <manifest>
+                        <mainClass>kim.charlesb.rcou.AppDriver</mainClass>
+                    </manifest>
+                </archive>
+            </configuration>
         </plugin>
         <plugin>
           <artifactId>maven-install-plugin</artifactId>
@@ -152,6 +159,28 @@
           <configuration>
           </configuration>
         </plugin>
+        <plugin>
+          <artifactId>maven-assembly-plugin</artifactId>
+           <configuration>
+             <archive>
+               <manifest>
+                 <mainClass>kim.charlesb.rcouModule/kim.charlesb.rcou.AppDriver</mainClass>
+               </manifest>
+              </archive>
+              <descriptorRefs>
+                <descriptorRef>jar-with-dependencies</descriptorRef>
+              </descriptorRefs>
+            </configuration>
+            <executions>
+              <execution>
+                <id>make-assembly</id>
+                  <phase>package</phase>
+                    <goals>
+                      <goal>single</goal>
+                    </goals>
+              </execution>
+            </executions>
+         </plugin>
       </plugins>
     </pluginManagement>
     <plugins>

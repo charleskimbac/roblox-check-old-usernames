@@ -215,10 +215,11 @@ public class App extends Application {
      * Empties existing TilePane, then opens a new thread to start finding previous usernames.
      */
     private void startSearch() {
-        if (submitButton.isDisabled()) { //if already running
+        if (submitButton.isDisable()) { //if already running
             return;
         }
         submitButton.setDisable(true);
+        textField.requestFocus();
         tilePane.getChildren().clear(); //reset tilePane
         Thread thread = new Thread(runnable);
         thread.setDaemon(true);
@@ -234,27 +235,21 @@ public class App extends Application {
     private Runnable beginSearchRunnable() {
         return () -> {
             String[] input = new String[0];
-            if (checkBox.isSelected()) {
-                input = separateNames(textField.getText());
-                if (input.length == 0) { //if ocr mode is checked or input is in bad format
-                    addPreviousNameViewer("An error occurred.", "Double check the search mode or search format.");
-                    updateTilePaneColumnsAlignment(1);
-                    Platform.runLater(() -> {
-                        disableButton();
-                        stage.sizeToScene();
-                    });
+            if (checkBox.isSelected()) { //OCR mode
+                if (textField.getText().length() == 0) {
+                    handleUnexpectedInput();
                     return;
                 }
-            } else {
+                input = separateNames(textField.getText());
+                if (input.length == 0) { //if input is in bad format
+                    handleUnexpectedInput();
+                    return;
+                }
+            } else { //single mode
                 //if user typed a space, change it to an underscore
                 String actual = textField.getText();
                 if (actual.length() > 25) { //single search terms should be less than 25chars
-                    addPreviousNameViewer("An error occurred.", "Double check the search mode or search format.");
-                    updateTilePaneColumnsAlignment(1);
-                    Platform.runLater(() -> {
-                        disableButton();          
-                        stage.sizeToScene();
-                    });
+                    handleUnexpectedInput();
                     return;
                 }
                 String converted = "";
@@ -297,38 +292,39 @@ public class App extends Application {
                 } catch (IOException|InterruptedException e) {
                     System.out.println(e);
                     Platform.runLater(() -> {
-                        disableButton();
+                        submitButton.setDisable(false);
                         stage.sizeToScene();
                     });
                 }
             }
-            Platform.runLater(() -> disableButton());
+            Platform.runLater(() -> submitButton.setDisable(false));
         };
     }
-    
+
     /**
-    * Disables the submit button and requests focus for the text field, since
-    * by default it will change focus to the next checkbox, which is annoying
-    */
-    public void disableButton() {
-        submitButton.setDisable(false);
-        textField.requestFocus();
+     *  Handles unexpected input.
+     */
+     private void handleUnexpectedInput() {
+        addPreviousNameViewer("An error occurred.", "Double check the search mode or search format.");
+        Platform.runLater(() -> {
+            submitButton.setDisable(false);
+            updateTilePaneColumnsAlignment(1);
+            stage.sizeToScene();
+        });
     }
     
     /**
      * Changes tilePane prefColumns and alignment to ensure no extra empty space is present if count < 4.
      * @param count number of tilePane children to be added
      */
-    private void updateTilePaneColumnsAlignment(int count) {
-        Platform.runLater(() -> {
-            if (count < 4) {
-                tilePane.setPrefColumns(count); //so no extra space is present
-                tilePane.setAlignment(Pos.CENTER);
-            } else {
-                tilePane.setPrefColumns(4);
-                tilePane.setAlignment(Pos.CENTER_LEFT);
-            }
-        });
+     private void updateTilePaneColumnsAlignment(int count) {
+        if (count < 4) {
+            tilePane.setPrefColumns(count); //so no extra space is present
+            tilePane.setAlignment(Pos.CENTER);
+        } else {
+            tilePane.setPrefColumns(4);
+            tilePane.setAlignment(Pos.CENTER_LEFT);
+        }
     }
     
     /**
@@ -379,10 +375,10 @@ public class App extends Application {
     }
     
     /**
-     * Adds a PreviousNameViewer to the tilePane.
-     * @param bold
-     * @param regular
-     */
+    * Adds a PreviousNameViewer to the tilePane.
+    * @param bold
+    * @param regular
+    */
     private void addPreviousNameViewer(String bold, String regular) {
         Platform.runLater(() -> {
             PreviousNameViewer previousNameViewer = new PreviousNameViewer(bold, regular);
@@ -391,26 +387,26 @@ public class App extends Application {
     }
     
     /**
-     * Separates the input string into an array of usernames only.
-     * @param a
-     * @return
-     */
+    * Separates the input string into an array of usernames only.
+    * @param a
+    * @return
+    */
     private String[] separateNames(String a) {
+        if (a.length() == 0) {
+            handleUnexpectedInput();
+            return new String[0];
+        }
         ArrayList<String> fin = new ArrayList<>();
-        if (a.charAt(0) == '@') {
-            System.out.println("wrong format!");       //IMPLEMENT!!!!!
-        } else {
-            int start = a.indexOf("@") + 1;
-            int end = -1;
-            while (start != 0) { // since start is + 1
-                end = a.indexOf(" ", start);
-                if (end == -1) { // (for last iter) there is no space at the end of the input string
-                    end = a.length();
-                }
-                fin.add(a.substring(start, end));
-                a = a.substring(end, a.length());
-                start = a.indexOf("@") + 1;
+        int start = a.indexOf("@") + 1;
+        int end = -1;
+        while (start != 0) { // since start is + 1
+            end = a.indexOf(" ", start);
+            if (end == -1) { // (for last iter) there is no space at the end of the input string
+                end = a.length();
             }
+            fin.add(a.substring(start, end));
+            a = a.substring(end, a.length());
+            start = a.indexOf("@") + 1;
         }
         return fin.toArray(new String[0]);
     }
